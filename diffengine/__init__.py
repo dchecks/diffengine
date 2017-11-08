@@ -484,8 +484,8 @@ def tweet_diff(diff, token):
     status = diff.new.title
     status = status.replace('| Stuff.co.nz', '')
 
-    if len(status) >= 85:
-        status = status[0:85] + "…"
+    if len(status) >= 225:
+        status = status[0:225] + "…"
 
     status += ' ' + diff.new.url
 

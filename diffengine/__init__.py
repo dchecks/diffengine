@@ -3,7 +3,8 @@
 
 # maybe this module should be broken up into multiple files, or maybe not ...
 
-UA = "diffengine/0.1.2 (+https://github.com/docnow/diffengine)"
+UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36"
+# """diffengine/0.1.2 (+https://github.com/docnow/diffengine)"
 
 import os
 import re
@@ -181,7 +182,8 @@ class Entry(BaseModel):
                 summary=summary,
                 entry=self
             )
-            new.archive()
+            # Stuff doesn't allow crawlers so wayback won't archive it
+            # new.archive()
             if old:
                 logging.debug("found new version %s", old.entry.url)
                 diff = Diff.create(old=old, new=new)
@@ -337,7 +339,7 @@ def setup_logging():
         filemode="a"
     )
     logging.getLogger("readability.readability").setLevel(logging.WARNING)
-    logging.getLogger("tweepy.binder").setLevel(logging.WARNING)
+    logging.getLogger("tweepy.binder").setLevel(logging.DEBUG)
 
 def load_config(prompt=True):
     global config
@@ -421,10 +423,11 @@ def tweet_diff(diff, token):
     elif diff.tweeted:
         logging.warn("diff %s has already been tweeted", diff.id)
         return
-    elif not (diff.old.archive_url and diff.new.archive_url):
-        logging.warn("not tweeting without archive urls")
-        return
+    # elif not (diff.old.archive_url and diff.new.archive_url):
+    #     logging.warn("not tweeting without archive urls")
+    #     return
 
+    logging.info("tweeting about  %s", diff.new.title)
     t = config['twitter']
     auth = tweepy.OAuthHandler(t['consumer_key'], t['consumer_secret'])
     auth.secure = True
@@ -435,7 +438,7 @@ def tweet_diff(diff, token):
     if len(status) >= 85:
         status = status[0:85] + "…"
 
-    status += " " + diff.old.archive_url +  " ➜ " + diff.new.archive_url
+    #status += " " + diff.old.archive_url +  " ➜ " + diff.new.archive_url
 
     try:
         twitter.update_with_media(diff.thumbnail_path, status)

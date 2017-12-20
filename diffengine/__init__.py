@@ -295,7 +295,7 @@ class Diff(BaseModel):
 
     def validate_diff(self, diff):
         for exclusion in self.diff_exclusions:
-            diff = diff.replace("", exclusion)
+            diff = diff.replace(exclusion, "")
 
         if '<ins>' not in diff and '<del>' not in diff:
             return False

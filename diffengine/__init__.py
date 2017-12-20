@@ -291,6 +291,15 @@ class Diff(BaseModel):
         else:
             return False
 
+    diff_exclusions = ["<ins>* Comments on this article have been closed.</ins>"]
+
+    def validate_diff(self, diff):
+        for exclusion in self.diff_exclusions:
+            diff = diff.replace("", exclusion)
+
+        if '<ins>' not in diff and '<del>' not in diff:
+            return False
+
 
     def _generate_diff_html(self):
         if os.path.isfile(self.html_path):
@@ -298,7 +307,7 @@ class Diff(BaseModel):
         tmpl_path = os.path.join(os.path.dirname(__file__), "diff.html")
         logging.debug("creating html diff: %s", self.html_path)
         diff = htmldiff.render_html_diff(self.old.html, self.new.html)
-        if '<ins>' not in diff and '<del>' not in diff:
+        if not self.validate_diff(diff):
             return False
         tmpl = jinja2.Template(codecs.open(tmpl_path, "r", "utf8").read())
         html = tmpl.render(

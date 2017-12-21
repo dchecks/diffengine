@@ -53,7 +53,7 @@ class Feed(BaseModel):
                 .where(Feed.url==self.url)
                 .order_by(Entry.created.desc()))
 
-    def get_latest(self):
+    def refresh_feed(self):
         """
         Gets the feed and creates new entries for new content. The number
         of new entries created will be returned.
@@ -66,18 +66,18 @@ class Feed(BaseModel):
             logging.error("unable to fetch feed %s: %s", self.url, e)
             return 0
         count = 0
-        for e in feed.entries:
+        for entry in feed.entries:
             # note: look up with url only, because there may be 
             # overlap bewteen feeds, especially when a large newspaper
             # has multiple feeds
-            entry, created = Entry.get_or_create(url=e.link)
+            entry, created = Entry.get_or_create(url=entry.link)
             if created:
                 FeedEntry.create(entry=entry, feed=self)
-                logging.info("found new entry: %s", e.link)
+                logging.info("found new entry: %s", entry.link)
                 count += 1
             elif len(entry.feeds.where(Feed.url == self.url)) == 0: 
                 FeedEntry.create(entry=entry, feed=self)
-                logging.debug("found entry from another feed: %s", e.link)
+                logging.debug("found entry from another feed: %s", entry.link)
                 count += 1
 
         return count
@@ -291,15 +291,23 @@ class Diff(BaseModel):
         else:
             return False
 
-    diff_exclusions = ["<ins>* Comments on this article have been closed.</ins>"]
 
     def validate_diff(self, diff):
-        for exclusion in self.diff_exclusions:
-            diff = diff.replace(exclusion, "")
-
         if '<ins>' not in diff and '<del>' not in diff:
             return False
+        else:
+            return True
 
+    diff_exclusions = ["<ins>* Comments on this article have been closed.</ins>",
+                       "<ins>Comments have now closed.</ins>",
+                       "<del>* Comments on this article have been closed.</del>",]
+
+    def filter_diff(self, diff):
+        logging.debug('Diff filtering, before: %s', diff)
+        for exclusion in self.diff_exclusions:
+            diff = diff.replace(exclusion, "")
+        logging.debug('Diff filtering, after: %s', diff)
+        return diff
 
     def _generate_diff_html(self):
         if os.path.isfile(self.html_path):
@@ -307,6 +315,7 @@ class Diff(BaseModel):
         tmpl_path = os.path.join(os.path.dirname(__file__), "diff.html")
         logging.debug("creating html diff: %s", self.html_path)
         diff = htmldiff.render_html_diff(self.old.html, self.new.html)
+        diff = self.filter_diff(diff)
         if not self.validate_diff(diff):
             return False
         tmpl = jinja2.Template(codecs.open(tmpl_path, "r", "utf8").read())
@@ -447,7 +456,8 @@ def tweet_diff(diff, token):
     if len(status) >= 85:
         status = status[0:85] + "…"
 
-    #status += " " + diff.old.archive_url +  " ➜ " + diff.new.archive_url
+    status += " " + diff.new.url
+        #old.archive_url +  " ➜ " + diff.new.archive_url
 
     try:
         twitter.update_with_media(diff.thumbnail_path, status)
@@ -484,7 +494,7 @@ def main():
             logging.debug("created new feed for %s", f['url'])
 
         # get latest feed entries
-        feed.get_latest()
+        feed.refresh_feed()
         
         # get latest content for each entry
         for entry in feed.entries:

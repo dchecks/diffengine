@@ -19,7 +19,7 @@ def test_version():
 
 def test_feed():
     f = Feed.create(name="Test", url="https://inkdroid.org/feed.xml")
-    f.get_latest()
+    f.refresh_feed()
     assert f.created
     assert len(f.entries) == 10
 
@@ -74,10 +74,10 @@ def test_many_to_many():
     url="https://www.washingtonpost.com/classic-apps/how-a-week-of-tweets-by-trump-stoked-anxiety-moved-markets-and-altered-plans/2017/01/07/38be8e64-d436-11e6-9cb0-54ab630851e8_story.html"
 
     f1 = Feed.create(name="feed1", url="https://raw.githubusercontent.com/DocNow/diffengine/master/test-data/feed1.xml")
-    f1.get_latest()
+    f1.refresh_feed()
 
     f2 = Feed.create(name="feed2", url="https://raw.githubusercontent.com/DocNow/diffengine/master/test-data/feed2.xml")
-    f2.get_latest()
+    f2.refresh_feed()
 
     assert f1.entries.where(Entry.url==url).count() == 1
     assert f2.entries.where(Entry.url==url).count() == 1
@@ -88,7 +88,7 @@ def test_many_to_many():
 def test_bad_feed_url():
     # bad feed url shouldn't cause a fatal exception
     f = Feed.create(name="feed1", url="http://example.org/feedfeed.xml")
-    f.get_latest()
+    f.refresh_feed()
     assert True
 
 def test_whitespace():

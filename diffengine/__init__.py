@@ -291,17 +291,19 @@ class Diff(BaseModel):
         else:
             return False
 
-    ins_diff_exclusions = ["<ins>* Comments",
+    ins_diff_exclusions = ["<ins>\* Comments",
                        "<ins>Comments",]
 
-    del_diff_exclusion = ["<del>* Comments",
+    del_diff_exclusions = ["<del>\* Comments",
                           "<del>Comments",
                           "Last updated <del>",]
 
     def validate_diff(self, diff):
         if '<ins>' not in diff and '<del>' not in diff:
+            logging.debug('No change found')
             return False
 
+        logging.info("Diff found, checking exclusions")
         ins_count = len(re.findall("<ins>", diff))
         del_count = len(re.findall("<del>", diff))
         ins_exclusion_count = 0
@@ -313,7 +315,7 @@ class Diff(BaseModel):
             del_exclusion_count += len(re.findall(exclusion, diff))
 
         if ins_count == ins_exclusion_count and del_count == del_exclusion_count:
-            logging.info('Ignoring diff due to exclusion count')
+            logging.info('Ignoring diff due to exclusion count, (ins: %s, del: %s)', ins_exclusion_count, del_exclusion_count)
             return False
 
         return True

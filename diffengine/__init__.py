@@ -291,23 +291,32 @@ class Diff(BaseModel):
         else:
             return False
 
+    ins_diff_exclusions = ["<ins>* Comments",
+                       "<ins>Comments",]
+
+    del_diff_exclusion = ["<del>* Comments",
+                          "<del>Comments",
+                          "Last updated <del>",]
 
     def validate_diff(self, diff):
         if '<ins>' not in diff and '<del>' not in diff:
             return False
-        else:
-            return True
 
-    diff_exclusions = ["<ins>* Comments on this article have been closed.</ins>",
-                       "<ins>Comments have now closed.</ins>",
-                       "<del>* Comments on this article have been closed.</del>",]
+        ins_count = len(re.findall("<ins>", diff))
+        del_count = len(re.findall("<del>", diff))
+        ins_exclusion_count = 0
+        del_exclusion_count = 0
 
-    def filter_diff(self, diff):
-        logging.debug('Diff filtering, before: %s', diff)
-        for exclusion in self.diff_exclusions:
-            diff = diff.replace(exclusion, "")
-        logging.debug('Diff filtering, after: %s', diff)
-        return diff
+        for exclusion in self.ins_diff_exclusions:
+            ins_exclusion_count += len(re.findall(exclusion, diff))
+        for exclusion in self.del_diff_exclusions:
+            del_exclusion_count += len(re.findall(exclusion, diff))
+
+        if ins_count == ins_exclusion_count and del_count == del_exclusion_count:
+            logging.info('Ignoring diff due to exclusion count')
+            return False
+
+        return True
 
     def _generate_diff_html(self):
         if os.path.isfile(self.html_path):
@@ -315,7 +324,6 @@ class Diff(BaseModel):
         tmpl_path = os.path.join(os.path.dirname(__file__), "diff.html")
         logging.debug("creating html diff: %s", self.html_path)
         diff = htmldiff.render_html_diff(self.old.html, self.new.html)
-        diff = self.filter_diff(diff)
         if not self.validate_diff(diff):
             return False
         tmpl = jinja2.Template(codecs.open(tmpl_path, "r", "utf8").read())
@@ -453,11 +461,12 @@ def tweet_diff(diff, token):
     twitter = tweepy.API(auth)
 
     status = diff.new.title
+    status = status.replace('| Stuff.co.nz', '')
+
     if len(status) >= 85:
         status = status[0:85] + "…"
 
-    status = status.replace('Stuff.co.nz', '')
-    status += diff.new.url
+    status += ' ' + diff.new.url
 
     try:
         twitter.update_with_media(diff.thumbnail_path, status)

@@ -66,18 +66,18 @@ class Feed(BaseModel):
             logging.error("unable to fetch feed %s: %s", self.url, e)
             return 0
         count = 0
-        for entry in feed.entries:
+        for feed_entry in feed.entries:
             # note: look up with url only, because there may be 
             # overlap bewteen feeds, especially when a large newspaper
             # has multiple feeds
-            entry, created = Entry.get_or_create(url=entry.link)
+            entry, created = Entry.get_or_create(url=feed_entry.link)
             if created:
                 FeedEntry.create(entry=entry, feed=self)
-                logging.info("found new entry: %s", entry.link)
+                logging.info("found new entry: %s", feed_entry.link)
                 count += 1
             elif len(entry.feeds.where(Feed.url == self.url)) == 0: 
                 FeedEntry.create(entry=entry, feed=self)
-                logging.debug("found entry from another feed: %s", entry.link)
+                logging.debug("found entry from another feed: %s", feed_entry.link)
                 count += 1
 
         return count
@@ -456,8 +456,8 @@ def tweet_diff(diff, token):
     if len(status) >= 85:
         status = status[0:85] + "…"
 
-    status += " " + diff.new.url
-        #old.archive_url +  " ➜ " + diff.new.archive_url
+    status = status.replace('Stuff.co.nz', '')
+    status += diff.new.url
 
     try:
         twitter.update_with_media(diff.thumbnail_path, status)

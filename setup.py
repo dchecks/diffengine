@@ -24,10 +24,10 @@ if __name__ == "__main__":
         description="Tweet changes to stories in RSS feeds",
         install_requires=reqs,
         dependency_links=deps,
-        setup_data={'diffengine': ['diffengine/diff.html']},
+        setup_data={'diffengine': ['diffengine/diff_template.html']},
         setup_requires=["pytest-runner"],
         tests_require=["pytest"],
-        package_data={"diffengine": ["diff.html"]},
+        package_data={"diffengine": ["diff_template.html"]},
         entry_points={
             'console_scripts': [
                 'diffengine=diffengine:main'

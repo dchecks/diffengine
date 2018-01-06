@@ -44,7 +44,11 @@ class Feed(BaseModel):
     url = CharField(primary_key=True)
     name = CharField()
     created = DateTimeField(default=datetime.utcnow)
-    
+
+    @staticmethod
+    def sanitize_url(url):
+        return url.replace('http://', 'https://')
+
     @property
     def entries(self):
         return (Entry.select()
@@ -66,20 +70,31 @@ class Feed(BaseModel):
             logging.error("unable to fetch feed %s: %s", self.url, e)
             return 0
         count = 0
+        dupe_count = 0
+        dupe_table = []
         for feed_entry in feed.entries:
             # note: look up with url only, because there may be 
             # overlap bewteen feeds, especially when a large newspaper
             # has multiple feeds
-            entry, created = Entry.get_or_create(url=feed_entry.link)
-            if created:
-                FeedEntry.create(entry=entry, feed=self)
-                logging.info("found new entry: %s", feed_entry.link)
-                count += 1
-            elif len(entry.feeds.where(Feed.url == self.url)) == 0: 
-                FeedEntry.create(entry=entry, feed=self)
-                logging.debug("found entry from another feed: %s", feed_entry.link)
-                count += 1
+            s_url = Feed.sanitize_url(feed_entry.link)
+            entry, created = Entry.get_or_create(url=s_url)
 
+            if created in dupe_table:
+                dupe_count += 1
+            else:
+                dupe_table.append(entry)
+
+                if created:
+                    FeedEntry.create(entry=entry, feed=self)
+                    logging.info("found new entry: %s", feed_entry.link)
+                    count += 1
+                elif len(entry.feeds.where(Feed.url == self.url)) == 0:
+                    FeedEntry.create(entry=entry, feed=self)
+                    logging.debug("found entry from another feed: %s", feed_entry.link)
+                    count += 1
+
+        if dupe_count > 0:
+            logging.info('Found duplicates in the feed, %s', str(dupe_table))
         return count
 
 
@@ -213,7 +228,7 @@ class EntryVersion(BaseModel):
     url = CharField()
     summary = CharField()
     created = DateTimeField(default=datetime.utcnow)
-    archive_url = CharField(null=True)
+    # archive_url = CharField(null=True)
     entry = ForeignKeyField(Entry, related_name='versions')
 
     @property
@@ -243,23 +258,23 @@ class EntryVersion(BaseModel):
     def html(self):
         return "<h1>%s</h1>\n\n%s" % (self.title, self.summary)
 
-    def archive(self):
-        save_url = "https://web.archive.org/save/" + self.url
-        try:
-            resp = _get(save_url)
-            wayback_id = resp.headers.get("Content-Location")
-            if wayback_id:
-                self.archive_url = "https://wayback.archive.org" + wayback_id
-                logging.debug("archived version at %s", self.archive_url)
-                self.save()
-                return self.archive_url
-            else:
-                logging.error("unable to get archive id from %s: %s",
-                        self.archive_url, resp.headers)
-
-        except Exception as e:
-            logging.error("unexpected archive.org response for %s: %s", save_url, e)
-        return None
+    # def archive(self):
+    #     save_url = "https://web.archive.org/save/" + self.url
+    #     try:
+    #         resp = _get(save_url)
+    #         wayback_id = resp.headers.get("Content-Location")
+    #         if wayback_id:
+    #             self.archive_url = "https://wayback.archive.org" + wayback_id
+    #             logging.debug("archived version at %s", self.archive_url)
+    #             self.save()
+    #             return self.archive_url
+    #         else:
+    #             logging.error("unable to get archive id from %s: %s",
+    #                     self.archive_url, resp.headers)
+    #
+    #     except Exception as e:
+    #         logging.error("unexpected archive.org response for %s: %s", save_url, e)
+    #     return None
 
 class Diff(BaseModel):
     old = ForeignKeyField(EntryVersion, related_name="prev_diffs")
@@ -310,9 +325,15 @@ class Diff(BaseModel):
         del_exclusion_count = 0
 
         for exclusion in self.ins_diff_exclusions:
-            ins_exclusion_count += len(re.findall(exclusion, diff))
+            result = len(re.findall(exclusion, diff))
+            ins_exclusion_count += result
+            if result > 0:
+                logging.debug('Matched insert exclusion: %s', exclusion)
         for exclusion in self.del_diff_exclusions:
-            del_exclusion_count += len(re.findall(exclusion, diff))
+            result = len(re.findall(exclusion, diff))
+            del_exclusion_count += result
+            if result > 0:
+                logging.debug('Matched delete exclusion: %s', exclusion)
 
         if ins_count == ins_exclusion_count and del_count == del_exclusion_count:
             logging.info('Ignoring diff due to exclusion count, (ins: %s, del: %s)', ins_exclusion_count, del_exclusion_count)
@@ -323,7 +344,7 @@ class Diff(BaseModel):
     def _generate_diff_html(self):
         if os.path.isfile(self.html_path):
             return
-        tmpl_path = os.path.join(os.path.dirname(__file__), "diff.html")
+        tmpl_path = os.path.join(os.path.dirname(__file__), "diff_template.html")
         logging.debug("creating html diff: %s", self.html_path)
         diff = htmldiff.render_html_diff(self.old.html, self.new.html)
         if not self.validate_diff(diff):
@@ -332,9 +353,7 @@ class Diff(BaseModel):
         html = tmpl.render(
             title=self.new.title,
             url=self.old.entry.url,
-            old_url=self.old.archive_url,
             old_time=self.old.created,
-            new_url=self.new.archive_url,
             new_time=self.new.created,
             diff=diff
         )
@@ -361,7 +380,7 @@ class Diff(BaseModel):
 def setup_logging():
     path = config.get('log', home_path('diffengine.log'))
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         filename=path,
         filemode="a"

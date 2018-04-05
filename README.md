@@ -2,31 +2,10 @@
 <img height="200" src="https://github.com/DocNow/diffengine/blob/master/diffengine.png?raw=true">
 </div>
 
-diffengine is a utility for watching RSS feeds to see when story content
-changes. When new content is found a snapshot is saved at the Internet Archive,
-and a diff is generated for sending to social media. The hope is that it can
-help draw attention to the way news is being shaped on the web. It also creates
-a database of changes over time that can be useful for research purposes.
+This is the code behind twitter bot [stuff_diff]
+Some of the modifications made to this fork are specific for running on Stuff
 
-diffengine draws heavily on the inspiration of [NYTDiff] and [NewsDiffs] which
-*almost* did what we wanted. [NYTdiff] is able to create presentable diff images
-and tweet them, but was designed to work specifically with the NYTimes API.
-NewsDiffs provides a comprehensive framework for watching changes on multiple
-sites (Washington Post, New York Times, CNN, BBC, etc) but you need to be a
-programmer to add a [parser
-module](https://github.com/ecprice/newsdiffs/tree/master/parsers) for a website
-that you want to monitor. It is also a full-on website which involves some
-commitment to install and run.
-
-With the help of [feedparser], diffengine takes a different approach by working
-with any site that publishes an RSS feed of changes. This covers many news
-organizations, but also personal blogs and organizational websites that put out
-regular updates. And with the [readability] module, diffengine is able to
-automatically extract the primary content of pages, without requiring special
-parsing to remove boilerplate material. And like NYTDiff, instead of creating
-another website for people to watch, diffengine pushes updates out to social
-media where people are already, while also building a local database of diffs
-that can be used for research purposes.
+For information on the original project see the [upstream repo] 
 
 ## Install 
 
@@ -99,6 +78,7 @@ accounts.
 * [repubblica_diff]: edits to [La Repubblica]
 * [reuters_diff]: edits to [Reuters]
 * [rt_edits]: edits to [RT]
+* [stuff_diff]: edits to [Stuff]
 * [telegraph_diff]: edits to the [Telegraph]
 * [torstar_diff]: edits to [The Toronto Star]
 * [wapo_diff]: edits to [The Washington Post]
@@ -153,8 +133,6 @@ twitter:
 
 ## Develop
 
-[![Build Status](https://travis-ci.org/DocNow/diffengine.svg)](http://travis-ci.org/DocNow/diffengine)
-
 Here's how to get started hacking on diffengine with [pyenv]:
 
 ```
@@ -181,9 +159,10 @@ test_diffengine.py .....
 [readability]: https://github.com/buriy/python-readability
 [PhantomJS]: http://phantomjs.org
 [Python 3]: https://python.org
-[create an issue]: https://github.com/DocNow/diffengine/issues
+[create an issue]: https://github.com/dchecks/diffengine/issues
 [pyenv]: https://github.com/yyuu/pyenv
 [Ryan Baumann's "diffengine" Twitter list]: https://twitter.com/ryanfb/lists/diffengine
+[upstream repo]: https://github.com/DocNow/diffengine
 
 [wapo_diff]: https://twitter.com/wapo_diff
 [The Washington Post]: https://www.washingtonpost.com
@@ -244,3 +223,8 @@ test_diffengine.py .....
 
 [wsj_diff]: https://twitter.com/wsj_diff
 [Wall Street Journal]: http://www.wsj.com/
+
+[stuff_diff]: https://twitter.com/stuff_diff
+[Stuff]: https://stuff.co.nz
+
+

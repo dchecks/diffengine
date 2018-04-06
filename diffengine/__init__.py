@@ -127,6 +127,10 @@ class Entry(BaseModel):
         if hotness == 0:
             return True
 
+        # don't bother checking if it's older than 1 month
+        if hotness - 2628000 > 0:
+            return False
+
         # time since the entry was last checked
         staleness = (datetime.utcnow() - self.checked).seconds
 

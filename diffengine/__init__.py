@@ -343,12 +343,19 @@ class Diff(BaseModel):
 
     def _generate_diff_html(self):
         if os.path.isfile(self.html_path):
+            logging.error("Failed to create diff save directory: " + self.html_path)
             return
+
         tmpl_path = os.path.join(os.path.dirname(__file__), "diff_template.html")
+        if not os.path.isfile(tmpl_path):
+            logging.error("Failed to find diff template: " + tmpl_path)
+            return
+
         logging.debug("creating html diff: %s", self.html_path)
         diff = htmldiff.render_html_diff(self.old.html, self.new.html)
         if not self.validate_diff(diff):
             return False
+
         tmpl = jinja2.Template(codecs.open(tmpl_path, "r", "utf8").read())
         html = tmpl.render(
             title=self.new.title,
@@ -362,6 +369,7 @@ class Diff(BaseModel):
 
     def _generate_diff_images(self):
         if os.path.isfile(self.screenshot_path):
+            logging.error("Screenshot already exists at path: " + self.screenshot_path)
             return
         if not hasattr(self, 'browser'):
             phantomjs = config.get('phantomjs', 'phantomjs')
@@ -378,15 +386,21 @@ class Diff(BaseModel):
 
 
 def setup_logging():
-    path = config.get('log', home_path('diffengine.log'))
+    path = '/var/log/diffengine/'
+    if not os.path.exists(path):
+        os.makedirs(path)
+        logging.info("Created output directory " + path)
+
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        filename=path,
+        filename=path + 'diffengine.log',
         filemode="a"
     )
     logging.getLogger("readability.readability").setLevel(logging.WARNING)
-    logging.getLogger("tweepy.binder").setLevel(logging.DEBUG)
+    logging.getLogger("tweepy.binder").setLevel(logging.ERROR)
+    logging.getLogger("peewee").setLevel(logging.ERROR)
+
 
 def load_config(prompt=True):
     global config
@@ -399,6 +413,7 @@ def load_config(prompt=True):
         if prompt:
             config = get_initial_config()
         yaml.dump(config, open(config_file, "w"), default_flow_style=False)
+
 
 def get_initial_config():
     config = {"feeds": [], "phantomjs": "phantomjs"}
@@ -440,8 +455,10 @@ def get_initial_config():
 
     return config
 
+
 def home_path(rel_path):
     return os.path.join(home, rel_path)
+
 
 def setup_db():
     global db
@@ -451,6 +468,7 @@ def setup_db():
     db.connect()
     db.create_tables([Feed, Entry, FeedEntry, EntryVersion, Diff], safe=True)
 
+
 def setup_phantomjs():
     phantomjs = config.get("phantomjs", "phantomjs")
     try:
@@ -459,6 +477,7 @@ def setup_phantomjs():
         print("Please install phantomjs <http://phantomjs.org/>")
         print("If phantomjs is intalled but not in your path you can set the full path to phantomjs in your config: %s" % home.rstrip("/"))
         sys.exit()
+
 
 def tweet_diff(diff, token):
     if 'twitter' not in config:
@@ -506,6 +525,7 @@ def init(new_home, prompt=True):
     setup_logging()
     setup_db()
 
+
 def main():
     if len(sys.argv) == 1:
         home = os.getcwd()
@@ -546,6 +566,7 @@ def main():
     logging.info("shutting down: new=%s checked=%s skipped=%s elapsed=%s", 
         new, checked, skipped, elapsed)
 
+
 def _dt(d):
     return d.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -562,11 +583,14 @@ def _normal(s):
     s = s.strip()
     return s
 
+
 def _equal(s1, s2):
     return _fingerprint(s1) == _fingerprint(s2)
 
+
 punctuation = dict.fromkeys(i for i in range(sys.maxunicode) 
         if unicodedata.category(chr(i)).startswith('P'))
+
 
 def _fingerprint(s):
     # make sure the string has been normalized, bleach everything, remove all 
@@ -577,6 +601,7 @@ def _fingerprint(s):
     s = re.sub(r'\s+', '', s, flags=re.MULTILINE)
     s = s.translate(punctuation)
     return s
+
 
 def _remove_utm(url):
     u = urlparse(url)
@@ -591,8 +616,10 @@ def _remove_utm(url):
         u.fragment
     ])
 
+
 def _get(url):
     return requests.get(url, timeout=60, headers={"User-Agent": UA})
+
 
 if __name__ == "__main__":
     main()

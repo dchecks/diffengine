@@ -25,6 +25,7 @@ import subprocess
 import readability
 import unicodedata
 
+from datetime import datetime
 from peewee import *
 from datetime import datetime, timedelta
 from selenium import webdriver
@@ -290,7 +291,8 @@ class Diff(BaseModel):
     @property
     def html_path(self):
         # use prime number to spread across directories
-        path = home_path("diffs/%s/%s.html" % ((self.id % 257), self.id))
+        current_day = datetime.today().strftime('%Y-%m-%d')
+        path = home_path("diffs/%s/%s.html" % (current_day, self.id))
         if not os.path.isdir(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path))
         return path

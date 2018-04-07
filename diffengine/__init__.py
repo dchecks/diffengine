@@ -9,7 +9,6 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_1) AppleWebKit/537.36 (KHTML,
 import os
 import re
 import sys
-import json
 import time
 import yaml
 import bleach
@@ -19,21 +18,22 @@ import tweepy
 import logging
 import htmldiff
 import requests
-import selenium
 import feedparser
 import subprocess
 import readability
 import unicodedata
+import argparse
 
-from datetime import datetime
 from peewee import *
-from datetime import datetime, timedelta
+from datetime import datetime
 from selenium import webdriver
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+from argparse import RawTextHelpFormatter
 
 home = None
 config = {}
 db = SqliteDatabase(None)
+wayback_enabled = False
 
 
 class BaseModel(Model):
@@ -202,8 +202,8 @@ class Entry(BaseModel):
                 summary=summary,
                 entry=self
             )
-            # Stuff doesn't allow crawlers so wayback won't archive it
-            # new.archive()
+            if wayback_enabled:
+                new.archive()
             if old:
                 logging.debug("found new version %s", old.entry.url)
                 diff = Diff.create(old=old, new=new)
@@ -233,7 +233,7 @@ class EntryVersion(BaseModel):
     url = CharField()
     summary = CharField()
     created = DateTimeField(default=datetime.utcnow)
-    # archive_url = CharField(null=True)
+    archive_url = CharField(null=True)
     entry = ForeignKeyField(Entry, related_name='versions')
 
     @property
@@ -263,23 +263,23 @@ class EntryVersion(BaseModel):
     def html(self):
         return "<h1>%s</h1>\n\n%s" % (self.title, self.summary)
 
-    # def archive(self):
-    #     save_url = "https://web.archive.org/save/" + self.url
-    #     try:
-    #         resp = _get(save_url)
-    #         wayback_id = resp.headers.get("Content-Location")
-    #         if wayback_id:
-    #             self.archive_url = "https://wayback.archive.org" + wayback_id
-    #             logging.debug("archived version at %s", self.archive_url)
-    #             self.save()
-    #             return self.archive_url
-    #         else:
-    #             logging.error("unable to get archive id from %s: %s",
-    #                     self.archive_url, resp.headers)
-    #
-    #     except Exception as e:
-    #         logging.error("unexpected archive.org response for %s: %s", save_url, e)
-    #     return None
+    def archive(self):
+        save_url = "https://web.archive.org/save/" + self.url
+        try:
+            resp = _get(save_url)
+            wayback_id = resp.headers.get("Content-Location")
+            if wayback_id:
+                self.archive_url = "https://wayback.archive.org" + wayback_id
+                logging.debug("archived version at %s", self.archive_url)
+                self.save()
+                return self.archive_url
+            else:
+                logging.error("unable to get archive id from %s: %s",
+                        self.archive_url, resp.headers)
+
+        except Exception as e:
+            logging.error("unexpected archive.org response for %s: %s", save_url, e)
+        return None
 
 class Diff(BaseModel):
     old = ForeignKeyField(EntryVersion, related_name="prev_diffs")
@@ -291,25 +291,26 @@ class Diff(BaseModel):
     @property
     def html_path(self):
         # use prime number to spread across directories
-        current_day = datetime.today().strftime('%Y-%m-%d')
-        path = home_path("diffs/%s/%s.html" % (current_day, self.id))
+        created_day = self.created.strftime('%Y-%m-%d')
+        path = home_path("diffs/%s/%s.html" % (created_day, self.id))
         if not os.path.isdir(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path))
         return path
 
-    @property
-    def screenshot_path(self):
-        return self.html_path.replace(".html", ".jpg")
+    def screenshot_path(self, path=html_path):
+        return path.replace(".html", ".jpg")
 
-    @property
-    def thumbnail_path(self):
-        return self.screenshot_path.replace('.jpg', '-thumb.jpg')
+    def thumbnail_path(self, path=html_path):
+        return path.replace('.jpg', '-thumb.jpg')
 
-    def generate(self):
-        if self._generate_diff_html():
-            self._generate_diff_images()
+    def generate(self, path=html_path):
+        html = self.generate_diff_html(path)
+        if html:
+            codecs.open(path, "w", 'utf8').write(html)
+            self.generate_diff_images(path)
             return True
         else:
+            logging.error("Failed to generate diff for %s", path)
             return False
 
     ins_diff_exclusions = ["<ins>\* Comments",
@@ -347,20 +348,20 @@ class Diff(BaseModel):
 
         return True
 
-    def _generate_diff_html(self):
-        if os.path.isfile(self.html_path):
-            logging.error("Failed to create diff save directory: " + self.html_path)
-            return
+    def generate_diff_html(self, path):
+        if os.path.isfile(path):
+            logging.error("Diff file already exists: " + path)
+            return None
 
         tmpl_path = os.path.join(os.path.dirname(__file__), "diff_template.html")
         if not os.path.isfile(tmpl_path):
             logging.error("Failed to find diff template: " + tmpl_path)
-            return
+            return None
 
-        logging.debug("creating html diff: %s", self.html_path)
+        logging.debug("creating html diff: %s", path)
         diff = htmldiff.render_html_diff(self.old.html, self.new.html)
         if not self.validate_diff(diff):
-            return False
+            return None
 
         tmpl = jinja2.Template(codecs.open(tmpl_path, "r", "utf8").read())
         html = tmpl.render(
@@ -370,25 +371,28 @@ class Diff(BaseModel):
             new_time=self.new.created,
             diff=diff
         )
-        codecs.open(self.html_path, "w", 'utf8').write(html)
-        return True
+        return html
 
-    def _generate_diff_images(self):
-        if os.path.isfile(self.screenshot_path):
-            logging.error("Screenshot already exists at path: " + self.screenshot_path)
+    def generate_diff_images(self, html_path):
+        if os.path.isfile(html_path):
+            logging.error("Screenshot already exists at path: " + html_path)
             return
         if not hasattr(self, 'browser'):
             phantomjs = config.get('phantomjs', 'phantomjs')
             self.browser = webdriver.PhantomJS(phantomjs)
-        logging.debug("creating image screenshot %s", self.screenshot_path)
+
+        screenshot = self.screenshot_path(html_path)
+        logging.debug("creating image screenshot %s", screenshot)
         self.browser.set_window_size(1400, 1000)
-        self.browser.get(self.html_path)
+        self.browser.get(html_path)
         time.sleep(5) # give the page time to load
-        self.browser.save_screenshot(self.screenshot_path)
-        logging.debug("creating image thumbnail %s", self.thumbnail_path)
+        self.browser.save_screenshot(screenshot)
+
+        thumbnail = self.thumbnail_path(html_path)
+        logging.debug("creating image thumbnail %s", thumbnail)
         self.browser.set_window_size(800, 400)
         self.browser.execute_script("clip()")
-        self.browser.save_screenshot(self.thumbnail_path)
+        self.browser.save_screenshot(thumbnail)
 
 
 def setup_logging():
@@ -495,9 +499,6 @@ def tweet_diff(diff, token):
     elif diff.tweeted:
         logging.warn("diff %s has already been tweeted", diff.id)
         return
-    # elif not (diff.old.archive_url and diff.new.archive_url):
-    #     logging.warn("not tweeting without archive urls")
-    #     return
 
     logging.info("tweeting about  %s", diff.new.title)
     t = config['twitter']
@@ -532,26 +533,37 @@ def init(new_home, prompt=True):
     setup_db()
 
 
-def main():
-    if len(sys.argv) == 1:
-        home = os.getcwd()
-    else:
-        home = sys.argv[1]
+def rerun(entry_id):
+    entry_version = EntryVersion.select() \
+                    .join(Entry) \
+                    .where(Entry.id == entry_id)\
+                    .order_by(-EntryVersion.created)[0]
+    diff = entry_version.diff()
+    original_path = diff.html_path
+    i = 1
+    #Find the first available path
+    while i < 100:
+        rerun_path = original_path.replace(".html", "-rerun-" + str(i) + ".html")
+        if not rerun_path.isfile():
+            break
+        else:
+            i += 1
 
-    init(home)
-    start_time = datetime.utcnow()
-    logging.info("starting up with home=%s", home)
-    
+    diff.generate(rerun_path)
+    logging.info("Rerun complete, check %s for output", rerun_path)
+
+def process_feed():
     checked = skipped = new = 0
 
     for f in config.get('feeds', []):
+        logging.debug("Processing feed: %s", f['name'])
         feed, created = Feed.create_or_get(url=f['url'], name=f['name'])
         if created:
-            logging.debug("created new feed for %s", f['url'])
+            logging.debug("Created new feed for %s", f['url'])
 
         # get latest feed entries
         feed.refresh_feed()
-        
+
         # get latest content for each entry
         for entry in feed.entries:
             if not entry.stale:
@@ -567,10 +579,25 @@ def main():
                 new += 1
             if version and version.diff and 'twitter' in f:
                 tweet_diff(version.diff, f['twitter'])
+        logging.debug("Completed processing feed: %s", f['name'])
+    logging.info("Feed processing complete, new = %s, checked = %s, skipped = %s", new, checked, skipped)
+
+
+def main(args):
+    home = args.home
+
+    init(home)
+    start_time = datetime.utcnow()
+    logging.info("starting up with home=%s", home)
+
+    if args.rerun:
+        logging.info("Rerunning last diff for: " + str(args.rerun))
+        rerun(args.rerun)
+    else:
+        process_feed()
 
     elapsed = datetime.utcnow() - start_time
-    logging.info("shutting down: new=%s checked=%s skipped=%s elapsed=%s", 
-        new, checked, skipped, elapsed)
+    logging.info("shutting down, elapsed=%s", elapsed)
 
 
 def _dt(d):
@@ -585,7 +612,7 @@ def _normal(s):
     s = s.replace("’", "'")
     s = s.replace("\n", " ")
     s = s.replace("­", "") 
-    s = re.sub(r'  +', ' ', s)
+    s = re.sub(r' +', ' ', s)
     s = s.strip()
     return s
 
@@ -628,5 +655,10 @@ def _get(url):
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description='', formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument("--home", help='Working directory', default=os.getcwd())
+    parser.add_argument('--rerun', help='Regenerates the most recent diff of the given entity')
 
+    args = parser.parse_args()
+    main(args)

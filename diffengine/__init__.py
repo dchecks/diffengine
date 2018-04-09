@@ -186,7 +186,8 @@ class Entry(BaseModel):
         canonical_url = _remove_utm(resp.url)
 
         if canonical_url != self.url:
-            logging.debug("URL changed\n - From: %s\n - To: %s\n - Response Status: %s", self.url, canonical_url)
+            logging.debug("URL changed\n - From: %s\n - To: %s\n - Response Status: %s",
+                          self.url, canonical_url, resp.status_code)
 
         # get the latest version, if we have one
         versions = EntryVersion.select().where(EntryVersion.url==canonical_url)

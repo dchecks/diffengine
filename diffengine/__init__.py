@@ -181,7 +181,7 @@ class Entry(BaseModel):
         summary = doc.summary(html_partial=True)
         summary = bleach.clean(summary, tags=["p"], strip=True)
         summary = _normal(summary)
-        logging.debug("Response processed for entry %", self.id)
+        logging.debug("Response processed for entry %s", self.id)
         # in case there was a redirect, and remove utm style marketing
         canonical_url = _remove_utm(resp.url)
 

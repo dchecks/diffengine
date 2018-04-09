@@ -33,7 +33,6 @@ from argparse import RawTextHelpFormatter
 home = None
 config = {}
 db = SqliteDatabase(None)
-wayback_enabled = False
 
 
 class BaseModel(Model):
@@ -80,7 +79,7 @@ class Feed(BaseModel):
             s_url = Feed.sanitize_url(feed_entry.link)
             entry, created = Entry.get_or_create(url=s_url)
 
-            if created in dupe_table:
+            if entry in dupe_table:
                 dupe_count += 1
             else:
                 dupe_table.append(entry)
@@ -146,7 +145,7 @@ class Entry(BaseModel):
         logging.debug("%s not stale (r=%f)", self.url, r)
         return False
 
-    def get_latest(self):
+    def get_latest(self, archive_enabled):
         """
         get_latest is the heart of the application. It will get the current 
         version on the web, extract its summary with readability and compare 
@@ -170,7 +169,7 @@ class Entry(BaseModel):
             return None
 
         if resp.status_code != 200:
-            logging.warn("Got %s when fetching %s", resp.status_code, self.url)
+            logging.warning("Got %s when fetching %s", resp.status_code, self.url)
             return None
 
         doc = readability.Document(resp.text)
@@ -202,13 +201,13 @@ class Entry(BaseModel):
                 summary=summary,
                 entry=self
             )
-            if wayback_enabled:
+            if archive_enabled:
                 new.archive()
             if old:
                 logging.debug("found new version %s", old.entry.url)
                 diff = Diff.create(old=old, new=new)
                 if not diff.generate():
-                    logging.warn("html diff showed no changes: %s", self.url)
+                    logging.warning("html diff showed no changes: %s", self.url)
                     new.delete()
                     new = None
             else:
@@ -410,6 +409,7 @@ def setup_logging():
     logging.getLogger("readability.readability").setLevel(logging.WARNING)
     logging.getLogger("tweepy.binder").setLevel(logging.ERROR)
     logging.getLogger("peewee").setLevel(logging.ERROR)
+    logging.getLogger("requests_oauthlib").setLevel(logging.ERROR)
 
 
 def load_config(prompt=True):
@@ -552,14 +552,31 @@ def rerun(entry_id):
     diff.generate(rerun_path)
     logging.info("Rerun complete, check %s for output", rerun_path)
 
-def process_feed():
-    checked = skipped = new = 0
 
-    for f in config.get('feeds', []):
-        logging.debug("Processing feed: %s", f['name'])
-        feed, created = Feed.create_or_get(url=f['url'], name=f['name'])
+def process_feed():
+    checked = skipped = new = tweeted = diffs = 0
+
+    for feed_config in config.get('feeds', []):
+        feed_name = feed_config['name']
+        logging.debug("Processing feed: %s", feed_name)
+
+        #Tweeting config - default to on but require config
+        tweeting = True
+        if feed_config['tweet'] and feed_config['tweet'] is False:
+            logging.info("Tweeting disabled for feed %s", feed_name)
+            tweeting = False
+        if 'twitter' not in feed_config:
+            logging.info("No twitter config for feed %s", feed_name)
+            tweeting = False
+        #Wayback config
+        archive_enabled = feed_config.get('archive')
+        if archive_enabled:
+            logging.info("Wayback archive enabled for feed %s", feed_name)
+
+        #Process feed
+        feed, created = Feed.create_or_get(url=feed_config['url'], name=feed_config['name'])
         if created:
-            logging.debug("Created new feed for %s", f['url'])
+            logging.debug("Created new feed for %s", feed_config['url'])
 
         # get latest feed entries
         feed.refresh_feed()
@@ -568,19 +585,24 @@ def process_feed():
         for entry in feed.entries:
             if not entry.stale:
                 skipped += 1
+                logging.debug("%s - Skipping entry not stale", entry.id)
                 continue
             checked += 1
             try:
-                version = entry.get_latest()
+                version = entry.get_latest(archive_enabled)
+                if version:
+                    new += 1
+                if version and version.diff:
+                    diffs += 1
+                    if tweeting:
+                        tweet_diff(version.diff, feed_config['twitter'])
+                        tweeted += 1
             except Exception as e:
-                logging.error('unable to get latest', e)
-                continue
-            if version:
-                new += 1
-            if version and version.diff and 'twitter' in f:
-                tweet_diff(version.diff, f['twitter'])
-        logging.debug("Completed processing feed: %s", f['name'])
-    logging.info("Feed processing complete, new = %s, checked = %s, skipped = %s", new, checked, skipped)
+                logging.error('Unable to get latest for entry ' + entry.id, e)
+
+        logging.debug("Completed processing feed: %s", feed_config['name'])
+    logging.info("Feed processing complete, new: %s, checked: %s, skipped: %s, diffs: %s, tweeted: %s",
+                 new, checked, skipped, diffs, tweeted)
 
 
 def main(args):

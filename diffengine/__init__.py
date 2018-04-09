@@ -356,12 +356,12 @@ class Diff(BaseModel):
 
     def generate_diff_html(self, path):
         if os.path.isfile(path):
-            logging.error("Diff file already exists: " + path)
+            logging.error("Diff file already exists: %s",path)
             return None
 
         tmpl_path = os.path.join(os.path.dirname(__file__), "diff_template.html")
         if not os.path.isfile(tmpl_path):
-            logging.error("Failed to find diff template: " + tmpl_path)
+            logging.error("Failed to find diff template: %s", tmpl_path)
             return None
 
         logging.debug("creating html diff: %s", path)
@@ -381,7 +381,7 @@ class Diff(BaseModel):
 
     def generate_diff_images(self, html_path):
         if os.path.isfile(html_path):
-            logging.error("Screenshot already exists at path: " + html_path)
+            logging.error("Screenshot already exists at path: %s", html_path)
             return
         if not hasattr(self, 'browser'):
             phantomjs = config.get('phantomjs', 'phantomjs')
@@ -405,7 +405,7 @@ def setup_logging():
     path = '/var/log/diffengine/'
     if not os.path.exists(path):
         os.makedirs(path)
-        logging.info("Created output directory " + path)
+        logging.info("Created output directory %s", path)
 
     logging.basicConfig(
         level=logging.DEBUG,
@@ -605,7 +605,7 @@ def process_feed():
                         tweet_diff(version.diff, feed_config['twitter'])
                         tweeted += 1
             except Exception as e:
-                logging.error('Unable to get latest for entry ' + entry.id, e)
+                logging.error('Unable to get latest for entry %s', entry.id, e)
 
         logging.debug("Completed processing feed: %s", feed_config['name'])
     logging.info("Feed processing complete, new: %s, checked: %s, skipped: %s, diffs: %s, tweeted: %s",
@@ -620,7 +620,7 @@ def main(args):
     logging.info("starting up with home=%s", home)
 
     if args.rerun:
-        logging.info("Rerunning last diff for: " + str(args.rerun))
+        logging.info("Rerunning last diff for: %s", args.rerun)
         rerun(args.rerun)
     else:
         process_feed()

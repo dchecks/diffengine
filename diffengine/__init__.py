@@ -569,7 +569,7 @@ def process_feed():
 
         #Tweeting config - default to on but require config
         tweeting = True
-        if feed_config['tweet'] and feed_config['tweet'] is False:
+        if feed_config.get('tweet', True) and feed_config('tweet', True) is False:
             logging.info("Tweeting disabled for feed %s", feed_name)
             tweeting = False
         if 'twitter' not in feed_config:

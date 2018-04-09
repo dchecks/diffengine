@@ -34,6 +34,8 @@ home = None
 config = {}
 db = SqliteDatabase(None)
 
+trace_output = False
+
 
 class BaseModel(Model):
     class Meta:
@@ -172,14 +174,19 @@ class Entry(BaseModel):
             logging.warning("Got %s when fetching %s", resp.status_code, self.url)
             return None
 
+        if trace_output:
+            logging.debug("-- Trace response text from %s\n\n%s", self.url, resp.text)
         doc = readability.Document(resp.text)
         title = doc.title()
         summary = doc.summary(html_partial=True)
         summary = bleach.clean(summary, tags=["p"], strip=True)
         summary = _normal(summary)
-
+        logging.debug("Response processed for entry %", self.id)
         # in case there was a redirect, and remove utm style marketing
         canonical_url = _remove_utm(resp.url)
+
+        if canonical_url != self.url:
+            logging.debug("URL changed\n - From: %s\n - To: %s\n - Response Status: %s", self.url, canonical_url)
 
         # get the latest version, if we have one
         versions = EntryVersion.select().where(EntryVersion.url==canonical_url)

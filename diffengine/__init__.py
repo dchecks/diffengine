@@ -605,7 +605,8 @@ def process_feed():
                         tweet_diff(version.diff, feed_config['twitter'])
                         tweeted += 1
             except Exception as e:
-                logging.error('Unable to get latest for entry %s', entry.id, e)
+                logging.error('Unable to get latest for entry %s', entry.id)
+                logging.error("Exception: ", e)
 
         logging.debug("Completed processing feed: %s", feed_config['name'])
     logging.info("Feed processing complete, new: %s, checked: %s, skipped: %s, diffs: %s, tweeted: %s",

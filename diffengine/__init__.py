@@ -620,15 +620,17 @@ def main(args):
     init(home)
     start_time = datetime.utcnow()
     logging.info("starting up with home=%s", home)
-
-    if args.rerun:
-        logging.info("Rerunning last diff for: %s", args.rerun)
-        rerun(args.rerun)
-    else:
-        process_feed()
-
+    try:
+        if args.rerun:
+            logging.info("Rerunning last diff for: %s", args.rerun)
+            rerun(args.rerun)
+        else:
+            logging.debug("Processing feeds")
+            process_feed()
+    except Exception as e:
+        logging.error("Exception in main", e)
     elapsed = datetime.utcnow() - start_time
-    logging.info("shutting down, elapsed=%s", elapsed)
+    logging.info("Shutting down, elapsed=%s", elapsed)
 
 
 def _dt(d):

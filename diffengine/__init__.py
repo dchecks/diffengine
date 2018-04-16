@@ -311,13 +311,14 @@ class Diff(BaseModel):
         return path.replace('.jpg', '-thumb.jpg')
 
     def generate(self, path=html_path):
-        html = self.generate_diff_html(path)
+        path_str = str(path)
+        html = self.generate_diff_html(path_str)
         if html:
-            codecs.open(path, "w", 'utf8').write(html)
-            self.generate_diff_images(path)
+            codecs.open(path_str, "w", 'utf8').write(html)
+            self.generate_diff_images(path_str)
             return True
         else:
-            logging.error("Failed to generate diff for %s", path)
+            logging.error("Failed to generate diff for %s", path_str)
             return False
 
     ins_diff_exclusions = ["<ins>\* Comments",
@@ -357,7 +358,7 @@ class Diff(BaseModel):
 
     def generate_diff_html(self, path):
         if os.path.isfile(path):
-            logging.error("Diff file already exists: %s",path)
+            logging.error("Diff file already exists: %s", path)
             return None
 
         tmpl_path = os.path.join(os.path.dirname(__file__), "diff_template.html")
@@ -606,8 +607,7 @@ def process_feed():
                         tweet_diff(version.diff, feed_config['twitter'])
                         tweeted += 1
             except Exception as e:
-                logging.error('Unable to get latest for entry %s', entry.id)
-                logging.error("Exception: ", e)
+                logging.exception('Unable to get latest for entry %s', entry.id)
 
         logging.debug("Completed processing feed: %s", feed_config['name'])
     logging.info("Feed processing complete, new: %s, checked: %s, skipped: %s, diffs: %s, tweeted: %s",

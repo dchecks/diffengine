@@ -1,5 +1,4 @@
 readability
-htmldiff
 bleach
 genshi
 jinja2

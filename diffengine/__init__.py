@@ -215,7 +215,7 @@ class Entry(BaseModel):
             if old:
                 logging.debug("found new version %s", old.entry.url)
                 diff = Diff.create(old=old, new=new)
-                if not diff.generate():
+                if not diff.generate(None):
                     logging.warning("html diff showed no changes: %s", self.url)
                     new.delete()
                     new = None
@@ -305,17 +305,17 @@ class Diff(BaseModel):
             os.makedirs(os.path.dirname(path))
         return path
 
-    def screenshot_path(self, path):
+    def screenshot_path(self, path=None):
         if not path:
             path = self.html_path()
         return path.replace(".html", ".jpg")
 
-    def thumbnail_path(self, path):
+    def thumbnail_path(self, path=None):
         if not path:
             path = self.html_path()
         return path.replace('.jpg', '-thumb.jpg')
 
-    def generate(self, path):
+    def generate(self, path=None):
         if not path:
             path = self.html_path()
         html = self.generate_diff_html(path)

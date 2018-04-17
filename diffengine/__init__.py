@@ -35,6 +35,8 @@ config = {}
 db = SqliteDatabase(None)
 
 trace_output = False
+screenshot_suffix = ".jpg"
+thumbnail_suffix = "-thumb" + screenshot_suffix
 
 
 class BaseModel(Model):
@@ -308,12 +310,18 @@ class Diff(BaseModel):
     def screenshot_path(self, path=None):
         if not path:
             path = self.html_path()
-        return path.replace(".html", ".jpg")
+        return path.replace(".html", screenshot_suffix)
 
     def thumbnail_path(self, path=None):
         if not path:
             path = self.html_path()
-        return path.replace('.jpg', '-thumb.jpg')
+
+        if path.endswith(".jpg"):
+            return path.replace(".jpg", thumbnail_suffix)
+        elif path.endswith(".html"):
+            return path.replace(".html", thumbnail_suffix)
+        else:
+            return path.join(thumbnail_suffix)
 
     def generate(self, path=None):
         if not path:
@@ -388,7 +396,7 @@ class Diff(BaseModel):
         return html
 
     def generate_diff_images(self, html_path):
-        if os.path.isfile(html_path):
+        if os.path.isfile(self.screenshot_path(html_path)):
             logging.error("Screenshot already exists at path: %s", html_path)
             return
         if not hasattr(self, 'browser'):

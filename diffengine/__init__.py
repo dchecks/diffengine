@@ -131,6 +131,7 @@ class Entry(BaseModel):
 
         # don't bother checking if it's older than 1 month
         if hotness - 2628000 > 0:
+            logging.debug("%s is older than 1 month, excluding", self.url)
             return False
 
         # time since the entry was last checked
@@ -295,7 +296,6 @@ class Diff(BaseModel):
     tweeted = DateTimeField(null=True)
     blogged = DateTimeField(null=True)
 
-    @property
     def html_path(self):
         # use prime number to spread across directories
         created_day = self.created.strftime('%Y-%m-%d')
@@ -304,13 +304,13 @@ class Diff(BaseModel):
             os.makedirs(os.path.dirname(path))
         return path
 
-    def screenshot_path(self, path=html_path):
+    def screenshot_path(self, path=html_path()):
         return path.replace(".html", ".jpg")
 
-    def thumbnail_path(self, path=html_path):
+    def thumbnail_path(self, path=html_path()):
         return path.replace('.jpg', '-thumb.jpg')
 
-    def generate(self, path=html_path):
+    def generate(self, path=html_path()):
         path_str = str(path)
         html = self.generate_diff_html(path_str)
         if html:
@@ -525,12 +525,12 @@ def tweet_diff(diff, token):
     status += ' ' + diff.new.url
 
     try:
-        twitter.update_with_media(diff.thumbnail_path, status)
+        twitter.update_with_media(diff.thumbnail_path(), status)
         diff.tweeted = datetime.utcnow()
         logging.info("tweeted %s", status)
         diff.save()
     except Exception as e:
-        logging.error("unable to tweet: %s", e)
+        logging.exception("unable to tweet")
 
 
 def init(new_home, prompt=True):
@@ -548,7 +548,7 @@ def rerun(entry_id):
                     .where(Entry.id == entry_id)\
                     .order_by(-EntryVersion.created)[0]
     diff = entry_version.diff()
-    original_path = diff.html_path
+    original_path = diff.html_path()
     i = 1
     #Find the first available path
     while i < 100:

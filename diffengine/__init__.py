@@ -289,6 +289,7 @@ class EntryVersion(BaseModel):
             logging.error("unexpected archive.org response for %s: %s", save_url, e)
         return None
 
+
 class Diff(BaseModel):
     old = ForeignKeyField(EntryVersion, related_name="prev_diffs")
     new = ForeignKeyField(EntryVersion, related_name="next_diffs")
@@ -304,21 +305,26 @@ class Diff(BaseModel):
             os.makedirs(os.path.dirname(path))
         return path
 
-    def screenshot_path(self, path=html_path()):
+    def screenshot_path(self, path):
+        if not path:
+            path = self.html_path()
         return path.replace(".html", ".jpg")
 
-    def thumbnail_path(self, path=html_path()):
+    def thumbnail_path(self, path):
+        if not path:
+            path = self.html_path()
         return path.replace('.jpg', '-thumb.jpg')
 
-    def generate(self, path=html_path()):
-        path_str = str(path)
-        html = self.generate_diff_html(path_str)
+    def generate(self, path):
+        if not path:
+            path = self.html_path()
+        html = self.generate_diff_html(path)
         if html:
-            codecs.open(path_str, "w", 'utf8').write(html)
-            self.generate_diff_images(path_str)
+            codecs.open(path, "w", 'utf8').write(html)
+            self.generate_diff_images(path)
             return True
         else:
-            logging.error("Failed to generate diff for %s", path_str)
+            logging.error("Failed to generate diff for %s", path)
             return False
 
     ins_diff_exclusions = ["<ins>\* Comments",

@@ -48,9 +48,9 @@ def test_diff():
     diff = v2.diff
     assert diff.old == v1
     assert diff.new == v2
-    assert os.path.isfile(diff.html_path)
-    assert os.path.isfile(diff.screenshot_path)
-    assert os.path.isfile(diff.thumbnail_path)
+    assert os.path.isfile(diff.html_path())
+    assert os.path.isfile(diff.screenshot_path())
+    assert os.path.isfile(diff.thumbnail_path())
 
 def test_html_diff():
     f = Feed.get(Feed.url=="https://inkdroid.org/feed.xml")

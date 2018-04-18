@@ -4,6 +4,7 @@ dist
 *.pyc
 *.db
 config.yaml
+*.yaml
 diffs/*
 .cache
 .eggs

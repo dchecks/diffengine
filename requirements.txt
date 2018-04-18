@@ -1,4 +1,5 @@
 urllib3
+readability
 bleach
 genshi
 jinja2

@@ -1,0 +1,55 @@
+-Setup pi
+
+- scp key onto pi, disable password auth,
+    From local:
+        ssh-copy-id pi@10.0.0.21
+    As on pi root:
+    echo PubkeyAuthentication yes >> /etc/ssh/sshd_config
+    echo PasswordAuthentication no >> /etc/ssh/sshd_config
+    /etc/init.d/ssh restart
+
+- prep apt
+    sudo apt-get update
+    sudo apt-get install -y mlocate python3-pip git libxslt-dev
+
+- phantomjs
+    install from https://github.com/fg2it/phantomjs-on-raspberry/releases
+    ie wget https://github.com/fg2it/phantomjs-on-raspberry/releases/download/v2.1.1-wheezy-jessie/phantomjs && sudo mv phantomjs /usr/bin/
+
+- setup python
+    pip3 install setuptools virtualenv virtualenvwrapper
+
+- setup git
+    cd /var
+    git clone https://github.com/dchecks/diffengine.git
+
+- virtual env
+    export VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
+    source /usr/local/bin/virtualenvwrapper.sh
+
+    mkvirtualenv diffengine
+    ln -s ~/.virtualenvs/diffengine/bin/activate /var/diffengine/activate
+    cd /var/diffengine && pip install -r requirements.txt
+
+- setup logging
+    sudo mkdir /var/log/diffengine
+    sudo chown -R pi:pi /var/log/diffengine
+
+- Setup environment how I like it
+    echo 'export VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3' >> /home/pi/.bashrc
+    echo 'source /usr/local/bin/virtualenvwrapper.sh' >> /home/pi/.bashrc
+    echo 'export EDITOR=nano' >> /home/pi/.bashrc
+    echo 'alias stuff="cd /var/diffengine && source activate"' >> /home/pi/.bashrc
+    echo 'alias log="cd /var/log/diffengine && less diffengine.log"' >> /home/pi/.bashrc
+
+- copy script and config across (and db if picking up from somewhere)
+    scp diffengine.sh pi@10.0.0.21:/var/diffengine/
+    scp config.yaml pi@10.0.0.21:/var/diffengine/
+
+- set phantomjs location in yaml
+
+- setup cron job
+    crontab -e
+        */30 * * * * /var/diffengine/diffengine.sh
+
+

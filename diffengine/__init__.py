@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # maybe this module should be broken up into multiple files, or maybe not ...
+from FeedProcessor import FeedProcessor
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36"
 # """diffengine/0.1.2 (+https://github.com/docnow/diffengine)"
@@ -28,7 +29,6 @@ from peewee import *
 from datetime import datetime
 from selenium import webdriver
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
-from argparse import RawTextHelpFormatter
 
 home = None
 config = {}
@@ -302,7 +302,7 @@ class Diff(BaseModel):
     def html_path(self):
         # use prime number to spread across directories
         created_day = self.created.strftime('%Y-%m-%d')
-        path = home_path("diffs/%s/%s.html" % (created_day, self.id))
+        path = home_path("diffs/%s/%s/%s.html" % (created_day, self.id, self.id))
         if not os.path.isdir(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path))
         return path
@@ -512,41 +512,6 @@ def setup_phantomjs():
         sys.exit()
 
 
-def tweet_diff(diff, token):
-    if 'twitter' not in config:
-        logging.debug("twitter not configured")
-        return
-    elif not token:
-        logging.debug("access token/secret not set up for feed")
-        return
-    elif diff.tweeted:
-        logging.warn("diff %s has already been tweeted", diff.id)
-        return
-
-    logging.info("tweeting about  %s", diff.new.title)
-    t = config['twitter']
-    auth = tweepy.OAuthHandler(t['consumer_key'], t['consumer_secret'])
-    auth.secure = True
-    auth.set_access_token(token['access_token'], token['access_token_secret'])
-    twitter = tweepy.API(auth)
-
-    status = diff.new.title
-    status = status.replace('| Stuff.co.nz', '')
-
-    if len(status) >= 225:
-        status = status[0:225] + "…"
-
-    status += ' ' + diff.new.url
-
-    try:
-        twitter.update_with_media(diff.thumbnail_path(), status)
-        diff.tweeted = datetime.utcnow()
-        logging.info("tweeted %s", status)
-        diff.save()
-    except Exception as e:
-        logging.exception("unable to tweet")
-
-
 def init(new_home, prompt=True):
     global home
     home = new_home
@@ -576,21 +541,19 @@ def rerun(entry_id):
     logging.info("Rerun complete, check %s for output", rerun_path)
 
 
-def process_feed():
-    checked = skipped = new = tweeted = diffs = 0
+def process_feeds():
+    #Tweeting config - default to on
+    # tweeting = True
+    if config.get('tweet', True) is False:
+        logging.info("Tweeting disabled")
+        tweeting = False
+
+    processor = FeedProcessor(config['twitter'], tweeting)
 
     for feed_config in config.get('feeds', []):
         feed_name = feed_config['name']
         logging.debug("Processing feed: %s", feed_name)
 
-        #Tweeting config - default to on but require config
-        tweeting = True
-        if feed_config.get('tweet', True) is False:
-            logging.info("Tweeting disabled for feed %s", feed_name)
-            tweeting = False
-        if 'twitter' not in feed_config:
-            logging.info("No twitter config for feed %s", feed_name)
-            tweeting = False
         #Wayback config
         archive_enabled = feed_config.get('archive')
         if archive_enabled:
@@ -603,29 +566,10 @@ def process_feed():
 
         # get latest feed entries
         feed.refresh_feed()
-
-        # get latest content for each entry
-        for entry in feed.entries:
-            if not entry.stale:
-                skipped += 1
-                logging.debug("%s - Skipping entry not stale", entry.id)
-                continue
-            checked += 1
-            try:
-                version = entry.get_latest(archive_enabled)
-                if version:
-                    new += 1
-                if version and version.diff:
-                    diffs += 1
-                    if tweeting:
-                        tweet_diff(version.diff, feed_config['twitter'])
-                        tweeted += 1
-            except Exception as e:
-                logging.exception('Unable to get latest for entry %s', entry.id)
+        processor.process_feed_entries(feed.entries, feed_config['twitter'], archive_enabled)
 
         logging.debug("Completed processing feed: %s", feed_config['name'])
-    logging.info("Feed processing complete, new: %s, checked: %s, skipped: %s, diffs: %s, tweeted: %s",
-                 new, checked, skipped, diffs, tweeted)
+    logging.info("Feed processing complete, %s", processor.stats())
 
 
 def main(args):
@@ -640,7 +584,7 @@ def main(args):
             rerun(args.rerun)
         else:
             logging.debug("Processing feeds")
-            process_feed()
+            process_feeds()
     except Exception as e:
         logging.error("Exception in main", e)
     elapsed = datetime.utcnow() - start_time
